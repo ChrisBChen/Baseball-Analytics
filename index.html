@@ -6,7 +6,7 @@ permalink: /index.html
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>Baseball Hit Simulator</title>
 
     <link rel="stylesheet" href="css/bootstrap.css">
     <link rel="stylesheet" href="css/baseball.css">
@@ -14,8 +14,8 @@ permalink: /index.html
 
 </head>
 <body>
-<!-- Stadium adapted from Ani Gonzalez's baseball field-->
 <div class="container">
+    <h1>Baseball Hit Simulator</h1>
     <div class="row">
         <div class="col">
             <div class="field-container" id="field"></div>
@@ -23,6 +23,13 @@ permalink: /index.html
         <div class="col">
             <button type="button" class="btn btn-primary" id="ball-gen">Swing Away!</button>
             <button type="button" class="btn btn-primary" id="ball-gen-100">Sim 100 Hits</button>
+            <button type="button" class="btn btn-primary" id="clear-landings">Clear Landings</button>
+            <!-- For future implementation
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="colorblind-mode">
+                <label class="form-check-label" for="colorblind-mode">Colorblind Mode</label>
+            </div>
+            -->
             <div id="batted-ball-info"></div>
         </div>
     </div>
