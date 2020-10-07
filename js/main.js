@@ -12,6 +12,9 @@ let fielddim = 500;
 let playerRad = 5
 let ballRad = 2.5
 
+//Gravity
+const gravity = -32.17
+
 //Set maximum batter exit velo; default is 120 mph
 let maxExitVeloMPH = 120
 let maxExitVelofps = maxExitVeloMPH * 1.46667
@@ -47,6 +50,10 @@ let xfieldLineScale = d3.scaleLinear()
     .domain([-oFFDy,oFFDy])
     .range([-250,250])
 
+//Set tooltip box height and width
+var tooltipheight = 20
+var tooltipwidth = 100
+
 //Initialize global variables
 var players;
 var field;
@@ -55,6 +62,8 @@ var landings;
 var ballpos = [];
 var csvData;
 var traveltimeglobal;
+var landingData = [];
+var Tooltip;
 
 //Initialization functions
 drawField();
@@ -144,6 +153,7 @@ function drawPlayers(inputPlayers){
             //Initialize the ball
             ball = d3.select("#field").select("svg")
                 .append("g")
+                .attr("id","ball-group")
                 .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
                 .append("circle")
                 .attr("id","ball")
@@ -157,6 +167,30 @@ function drawPlayers(inputPlayers){
             landings = d3.select("#field").select("svg")
                 .append("g")
                 .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+            //Initialize tooltips
+            Tooltip = d3.select("#field")
+                .select("svg")
+                .append("g")
+                .attr("id","tooltip-group");
+
+            Tooltip.append("rect")
+                .attr("class", "tooltip-custom")
+                .attr("fill","white")
+                .attr("fill-opacity",0)
+                .attr("stroke-opacity",0)
+                .attr("stroke","black")
+                .attr("stroke-width",1)
+                .attr("height",0)
+                .attr("width",0)
+                .attr("x",0)
+                .attr("y",0)
+
+            Tooltip.append("text")
+                .attr("class","tooltip-text")
+                .attr("fill","black")
+                .attr("x",10)
+                .attr("y",10)
 
         })
 }
@@ -177,47 +211,6 @@ function dragged(event) {
 
 function dragended(d) {
     //d3.select(this).classed('active', false);
-}
-
-//Function to randomly generate a ball location on the field
-function genBall(){
-
-    var tempx;
-    var tempy;
-
-    // Fetch the boundaries of the field and initialize an SVG point
-    let path = document.getElementById('fieldline');
-    let testpoint = document.getElementById('field-svg').createSVGPoint();
-
-    do {
-        // Generate a random x and y value for the ball
-        tempx = Math.random() * height
-        tempy = Math.random() * height
-
-        // This code chunk tests if the hit ball is inside the park
-        testpoint.x = tempx
-        testpoint.y = tempy
-        console.log(testpoint.x, testpoint.y)
-        console.log('Point at 30,30:', path.isPointInFill(testpoint));
-    }
-    while (!(path.isPointInFill(testpoint)))
-
-    //Plot the ball in the field
-    d3.select("#ball")
-        .transition()
-        .duration(250)
-        .attr("cx",xfieldLineScale(0) + fielddim/2)
-        .attr("cy",yfieldLineScale(0))
-        .transition()
-        .attr("fill-opacity",100)
-        .attr("cx",tempx)
-        .attr("cy",tempy)
-
-    //set global ball position variable
-    ballpos = [tempx,tempy]
-
-    traveltimeglobal = calculateTravelTime();
-    calculateTimeToIntercept();
 }
 
 function genBall100(){
@@ -254,6 +247,9 @@ function genBall100(){
 function betterGenBall() {
     var tempcoords;
     var traveltime;
+    var yvelo;
+    var launchangle;
+    var exitvelo;
 
     // Fetch the boundaries of the field and initialize an SVG point
     let path = document.getElementById('fieldline');
@@ -282,29 +278,28 @@ function betterGenBall() {
             }
             return norm / variance;
         }
-        var launchangle;
         // Keep calculating launch angles until we get a fly ball
         do {
-            var launchangle = randomNormal(4) * (80 - (-60)) - 60
+            launchangle = randomNormal(4) * (80 - (-60)) - 60
         }
         while (launchangle < 25)
         console.log("Launch Angle: " + launchangle)
 
         //Generate a random exit velo (from a Gaussian distribution)
         //League average exit velo is about 89MPH, and max exit velo is around 120
-        let exitVelo = randomNormal(4) * (120 - 58) + 58
+        exitVelo = randomNormal(4) * (120 - 58) + 58
         console.log("Exit Velo: " + exitVelo + "mph")
         //convert to feet per second
         exitVelo *= 1.46667
 
         var xvelo = Math.cos(launchangle * Math.PI/180) * exitVelo
-        var yvelo = Math.sin(launchangle * Math.PI/180) * exitVelo
+        yvelo = Math.sin(launchangle * Math.PI/180) * exitVelo
 
         // Calculate traveltime using d = vi*t + 0.5(a)t^2
         //                            t = (d - 0.5(a)t^2)/vi
         // Assume contact height from 1.5 ft to 3.5 ft
         // Acceleration due to gravity is -32.17 ft/s^2
-        const gravity = -32.17
+
         var contactrange = [1.5,3.5]
         var contactheight = randomNormal(4)*(contactrange[1]-contactrange[0]) + contactrange[0]
         console.log("a = " + (0.5*gravity))
@@ -338,6 +333,16 @@ function betterGenBall() {
     while (!(path.isPointInFill(testpoint)))
 
     var svgcoords = [xfieldLineScale(tempcoords[0]) + fielddim/2,yfieldLineScale(tempcoords[1])]
+    var halfsvgcoords = [xfieldLineScale(tempcoords[0]/2) + fielddim/2,yfieldLineScale(tempcoords[1]/2)]
+
+    //Create scale for ball size based on height
+    //calculate max height reached using d = vi^2/(-2a)
+    ballheight = Math.pow(yvelo,2)/(-2*gravity)
+    //Maximum possible height given a 90-degree angle and 120mph exit velo is approx. 1579
+    let ballScale = d3.scaleLinear()
+        .domain([0,1579])
+        .range([5,15]);
+
 
     //Plot the ball in the field
     d3.select("#ball")
@@ -346,15 +351,24 @@ function betterGenBall() {
         .attr("cx",xfieldLineScale(0) + fielddim/2)
         .attr("cy",yfieldLineScale(0))
         .transition()
+        .ease(d3.easeLinear)
+        .duration(traveltime * 500)
         .attr("fill-opacity",100)
+        .attr("cx",halfsvgcoords[0])
+        .attr("cy",halfsvgcoords[1])
+        .attr("r",ballScale(ballheight))
+        .transition()
+        .ease(d3.easeLinear)
+        .duration(traveltime * 500)
         .attr("cx",svgcoords[0])
         .attr("cy",svgcoords[1])
+        .attr("r",ballRad)
 
     //set global ball position variable
     ballpos = [svgcoords[0],svgcoords[1]]
 
     traveltimeglobal = traveltime;
-    calculateTimeToIntercept();
+    calculateTimeToIntercept(launchangle,exitvelo);
 }
 
 //Runs the quadratic formula, returning various different outputs
@@ -402,7 +416,7 @@ function distancecalc(x1, y1, x2, y2){
     return Math.sqrt(Math.pow(x2 - x1,2) + Math.pow(y2 - y1,2));
 }
 
-function calculateTimeToIntercept(){
+function calculateTimeToIntercept(launchangle,exitvelo){
     // Store the player position closest to the ball and the time to intercept
     var mintime = [null,0]
     console.log(csvData)
@@ -431,21 +445,183 @@ function calculateTimeToIntercept(){
     })
     console.log(mintime)
     if (mintime[1] < traveltimeglobal){
-        landings.append("circle")
+        landingData.push({
+            type: "Fly Ball",
+            xpos: ballpos[0],
+            ypos: ballpos[1],
+            launchangle: launchangle,
+            exitvelo: exitvelo,
+            traveltime: traveltimeglobal,
+            fielded: true
+        })
+        landings.selectAll("circle")
+            .data(landingData.filter(function(d) { return d.fielded; }))
+            .enter()
+            .append("circle")
             .attr("class","record fielded")
             .attr("fill","green")
-            .attr("cx",ballpos[0])
-            .attr("cy",ballpos[1])
+            .attr("cx",d=>d.xpos)
+            .attr("cy",d=>d.ypos)
             .attr("r",2)
+            .on("mouseover", function(mouse,data) {
+                Tooltip.select(".tooltip-custom")
+                    .attr("x",mouse.offsetX + 8)
+                    .attr("y",mouse.offsetY - tooltipheight - 5)
+                    .attr("height",tooltipheight)
+                    .attr("width",tooltipwidth)
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",1)
+                    .attr("stroke-opacity",1);
+
+                Tooltip.select(".tooltip-text")
+                    .attr("x",mouse.offsetX + 10)
+                    .attr("y",mouse.offsetY - 10)
+                    .text(data.type + ": " + d3.format(".1f")(data.traveltime) + "s.")
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",1)
+
+
+                console.log(data)
+                console.log(mouse)
+                d3.select(this)
+                    .transition()
+                    .duration(150)
+                    .attr("stroke", "black")
+                    .attr("r",5)
+                    .attr("x",d=>(d.xpos-4))
+                    .attr("y",d=>(d.ypos-4))
+                    .attr("width",8)
+                    .attr("height",8)
+            })
+            .on("mousemove", function(d) {
+                Tooltip.select(".tooltip-custom")
+                    .attr("x",mouse.offsetX)
+                    .attr("y",mouse.offsetY)
+
+                Tooltip.select(".tooltip-text")
+                    .attr("x",mouse.offsetX + 10)
+                    .attr("y",mouse.offsetY + 10)
+            })
+            .on("mouseleave", function(d) {
+                Tooltip.select(".tooltip-custom")
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",0)
+                    .attr("stroke-opacity",0)
+                    .transition()
+                    .duration(0)
+                    .attr("height",0)
+                    .attr("width",0);
+
+                Tooltip.select(".tooltip-text")
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",0)
+                    .transition()
+                    .duration(0)
+                    .text("")
+                d3.select(this)
+                    .transition()
+                    .duration(150)
+                    .attr("stroke", "none")
+                    .attr("r",2)
+                    .attr("x",d=>(d.xpos-2))
+                    .attr("y",d=>(d.ypos-2))
+                    .attr("width",4)
+                    .attr("height",4)
+            })
     }
     else {
-        landings.append("rect")
+        landingData.push({
+            type: "Fly Ball",
+            xpos: ballpos[0],
+            ypos: ballpos[1],
+            launchangle: launchangle,
+            exitvelo: exitvelo,
+            traveltime: traveltimeglobal,
+            fielded: false
+        })
+        landings.selectAll("rect")
+            .data(landingData.filter(function(d) { return !d.fielded; }))
+            .enter()
+            .append("rect")
             .attr("class","record not-fielded")
             .attr("fill","red")
-            .attr("x",ballpos[0]-2)
-            .attr("y",ballpos[1]-2)
+            .attr("x",d=>(d.xpos-2))
+            .attr("y",d=>(d.ypos-2))
             .attr("width",4)
             .attr("height",4)
+            .on("mouseover", function(mouse,data) {
+                Tooltip.select(".tooltip-custom")
+                    .attr("x",mouse.offsetX + 8)
+                    .attr("y",mouse.offsetY - 25)
+                    .attr("height",tooltipheight)
+                    .attr("width",tooltipwidth)
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",1)
+                    .attr("stroke-opacity",1);
+
+                Tooltip.select(".tooltip-text")
+                    .attr("x",mouse.offsetX + 10)
+                    .attr("y",mouse.offsetY - 10)
+                    .text(data.type + ": " + d3.format(".1f")(data.traveltime) + "s.")
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",1)
+
+
+                console.log(data)
+                console.log(mouse)
+                d3.select(this)
+                    .transition()
+                    .duration(150)
+                    .attr("stroke", "black")
+                    .attr("r",5)
+                    .attr("x",d=>(d.xpos-4))
+                    .attr("y",d=>(d.ypos-4))
+                    .attr("width",8)
+                    .attr("height",8)
+            })
+            .on("mousemove", function(d) {
+                Tooltip.select(".tooltip-custom")
+                    .attr("x",mouse.offsetX)
+                    .attr("y",mouse.offsetY)
+
+                Tooltip.select(".tooltip-text")
+                    .attr("x",mouse.offsetX + 10)
+                    .attr("y",mouse.offsetY + 10)
+            })
+            .on("mouseleave", function(d) {
+                Tooltip.select(".tooltip-custom")
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",0)
+                    .attr("stroke-opacity",0)
+                    .transition()
+                    .duration(0)
+                    .attr("height",0)
+                    .attr("width",0);
+
+                Tooltip.select(".tooltip-text")
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",0)
+                    .transition()
+                    .duration(0)
+                    .text("")
+                d3.select(this)
+                    .transition()
+                    .duration(150)
+                    .attr("stroke", "none")
+                    .attr("r",2)
+                    .attr("x",d=>(d.xpos-2))
+                    .attr("y",d=>(d.ypos-2))
+                    .attr("width",4)
+                    .attr("height",4)
+            })
     }
     /*
     for (var i = 0; i < csvData.length; i++){
@@ -456,7 +632,32 @@ function calculateTimeToIntercept(){
      */
 }
 
+
+
+var landingmousemove = function(d) {
+    Tooltip
+        //.html("The exact value of<br>this cell is: " + d.value)
+        .attr("x",d3.select(this).attr("x"))
+        .attr("y",d3.select(this).attr("y"))/*
+        .style("left", (d3.mouse(this)[0]+70) + "px")
+        .style("top", (d3.mouse(this)[1]) + "px")
+        */
+}
+var landingmouseleave = function(d) {
+    Tooltip
+        .attr("fill-opacity",0)
+        .attr("stroke-opacity",0)
+    d3.select(this)
+        .transition()
+        .attr("stroke", "none")
+        .attr("r",2)
+        .attr("x",d=>(d.xpos-2))
+        .attr("y",d=>(d.ypos-2))
+        .attr("width",4)
+        .attr("height",4)
+}
 function clearLandings(){
+    landingData = []
     landings.selectAll(".record")
         .remove()
 }
