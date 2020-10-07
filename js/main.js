@@ -8,6 +8,7 @@ let fielddim = 500;
 
 //Set player radius
 let playerRad = 5
+let ballRad = 2.5
 
 //Distance of the foul line to the fence from homeplate, in feet
 // (i.e. home plate to left field wall, along the foul line)
@@ -27,19 +28,23 @@ let yfieldLineScale = d3.scaleLinear()
 let xfieldLineScale = d3.scaleLinear()
     .domain([-oFFDy,oFFDy])
     .range([-250,250])
-
+var players;
+var field;
+var ball;
 drawField();
 drawPlayers("data/players.csv");
+document.getElementById("ball-gen").onclick = genBall
 
 function drawField(){
-    let field = d3.select("#field").append("svg")
+    field = d3.select("#field").append("svg")
+        .attr("id","field-svg")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom)
         .append("g")
         .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
     field.append("path")
-        .attr("id","field")
+        .attr("id","fieldline")
         .attr("stroke","black")
         .attr("fill","white")
         .attr('pointer-events', 'all')
@@ -72,7 +77,7 @@ function drawPlayers(inputPlayers){
         .then(data => {
 
             // Define player group
-            let players = d3.select("#field").select("svg")
+            players = d3.select("#field").select("svg")
                 .append("g")
                 .attr("id","players")
                 .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
@@ -103,6 +108,17 @@ function drawPlayers(inputPlayers){
             players.selectAll('circle')
                 .call(drag);
 
+            //Initialize the ball
+            ball = d3.select("#field").select("svg")
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
+                .append("circle")
+                .attr("id","ball")
+                .attr("cx", xfieldLineScale(0) + fielddim/2)
+                .attr("cy", yfieldLineScale(0))
+                .attr("r",ballRad)
+                .attr("fill","red")
+                .attr("fill-opacity",0);
 
         })
 }
@@ -123,6 +139,40 @@ function dragged(event) {
 
 function dragended(d) {
     //d3.select(this).classed('active', false);
+}
+
+function genBall(){
+
+    var tempx;
+    var tempy;
+
+    // Fetch the boundaries of the field and initialize an SVG point
+    let path = document.getElementById('fieldline');
+    let testpoint = document.getElementById('field-svg').createSVGPoint();
+
+    do {
+        // Generate a random x and y value for the ball
+        tempx = Math.random() * height
+        tempy = Math.random() * height
+
+        // This code chunk tests if the hit ball is inside the park
+        testpoint.x = tempx
+        testpoint.y = tempy
+        console.log(testpoint.x, testpoint.y)
+        console.log('Point at 30,30:', path.isPointInFill(testpoint));
+    }
+    while (!(path.isPointInFill(testpoint)))
+
+    d3.select("#ball")
+        .transition()
+        .duration(250)
+        .attr("cx",xfieldLineScale(0) + fielddim/2)
+        .attr("cy",yfieldLineScale(0))
+        .transition()
+        .attr("fill-opacity",100)
+        .attr("cx",tempx)
+        .attr("cy",tempy)
+
 }
 
 // Input: Field position of player (e.g. 3B, SS)
