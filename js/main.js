@@ -64,7 +64,7 @@ drawPlayers("data/players.csv");
 // Activates to generate random ball position
 document.getElementById("ball-gen").onclick = genBall
 // Activates to calculate and plot time to intercept
-document.getElementById("field-ball").onclick = calculateTimeToIntercept
+document.getElementById("ball-gen-100").onclick = genBall100
 
 
 function drawField(){
@@ -212,14 +212,42 @@ function genBall(){
         .attr("cx",tempx)
         .attr("cy",tempy)
 
-    //Enable the field ball button
-    d3.select("#field-ball")
-        .attr("disabled",null)
-
     //set global ball position variable
     ballpos = [tempx,tempy]
 
     traveltimeglobal = calculateTravelTime();
+    calculateTimeToIntercept();
+}
+
+function genBall100(){
+    for (var i = 0; i < 100; i++){
+        var tempx;
+        var tempy;
+
+        // Fetch the boundaries of the field and initialize an SVG point
+        let path = document.getElementById('fieldline');
+        let testpoint = document.getElementById('field-svg').createSVGPoint();
+
+        do {
+            // Generate a random x and y value for the ball
+            tempx = Math.random() * height
+            tempy = Math.random() * height
+
+            // This code chunk tests if the hit ball is inside the park
+            testpoint.x = tempx
+            testpoint.y = tempy
+            console.log(testpoint.x, testpoint.y)
+            console.log('Point at 30,30:', path.isPointInFill(testpoint));
+        }
+        while (!(path.isPointInFill(testpoint)))
+
+        //set global ball position variable
+        ballpos = [tempx,tempy]
+
+        traveltimeglobal = calculateTravelTime();
+        calculateTimeToIntercept();
+    }
+
 }
 
 //This function calculates the travel time of the baseball using a random exit velocity
@@ -284,10 +312,10 @@ function calculateTimeToIntercept(){
         landings.append("rect")
             .attr("class","record not-fielded")
             .attr("fill","red")
-            .attr("x",ballpos[0]-1)
-            .attr("y",ballpos[1]-1)
-            .attr("width",2)
-            .attr("height",2)
+            .attr("x",ballpos[0]-2)
+            .attr("y",ballpos[1]-2)
+            .attr("width",4)
+            .attr("height",4)
     }
     /*
     for (var i = 0; i < csvData.length; i++){
