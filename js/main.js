@@ -250,6 +250,81 @@ function genBall100(){
 
 }
 
+function betterGenBall() {
+    var tempx;
+    var tempy;
+
+    // Fetch the boundaries of the field and initialize an SVG point
+    let path = document.getElementById('fieldline');
+    let testpoint = document.getElementById('field-svg').createSVGPoint();
+
+    do {
+        // Generate a random angle (left field = 0 deg, right field = 90 deg) for the ball
+        var tempangle = Math.random() * Math.PI/2
+
+        //Generate a random launch angle and velocity, preferring fly balls between 30-90 deg
+        /*
+        From the MLB: Launch Angles:
+            Ground ball: Less than 10 degrees
+            Line drive: 10-25 degrees
+            Fly ball: 25-50 degrees
+            Pop up: Greater than 50 degrees
+
+        Default league average launch angle is set at 10 degrees
+        Assume that all hits follow a normal distribution around 10 degrees,
+        with a maximum launch angle of 80 degrees
+         */
+        function randomNormal(variance){
+            var norm = 0;
+            for(var i = 0; i < variance; i++){
+                norm += Math.random();
+            }
+            return norm / variance;
+        }
+        var launchangle
+        // Keep calculating launch angles until we get a fly ball
+        do {
+            var launchangle = randomNormal(4) * (80 - (-60)) + 10
+        }
+        while (launchangle < 25)
+
+        //Generate a random exit velo (from a Gaussian distribution)
+        //League average exit velo is about 89MPH, and max exit velo is around 120
+        let exitVelo = randomNormal(4) * (120 - 58) + 58
+        //convert to feet per second
+        exitVelo *= 1.46667
+
+        /////////Currently calculating distance, then break into components to get coordinates
+
+        tempx = Math.random() * height
+        tempy = Math.random() * height
+
+        // This code chunk tests if the hit ball is inside the park
+        testpoint.x = tempx
+        testpoint.y = tempy
+        console.log(testpoint.x, testpoint.y)
+        console.log('Point at 30,30:', path.isPointInFill(testpoint));
+    }
+    while (!(path.isPointInFill(testpoint)))
+
+    //Plot the ball in the field
+    d3.select("#ball")
+        .transition()
+        .duration(250)
+        .attr("cx",xfieldLineScale(0) + fielddim/2)
+        .attr("cy",yfieldLineScale(0))
+        .transition()
+        .attr("fill-opacity",100)
+        .attr("cx",tempx)
+        .attr("cy",tempy)
+
+    //set global ball position variable
+    ballpos = [tempx,tempy]
+
+    traveltimeglobal = calculateTravelTime();
+    calculateTimeToIntercept();
+}
+
 //This function calculates the travel time of the baseball using a random exit velocity
 function calculateTravelTime(){
     var tempv = Math.random() * (maxExitVelofps - minExitVelofps) + minExitVelofps
