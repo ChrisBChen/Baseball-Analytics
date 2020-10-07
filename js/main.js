@@ -73,7 +73,7 @@ drawPlayers("data/players.csv");
 // Activates to generate random ball position
 document.getElementById("ball-gen").onclick = betterGenBall
 // Activates to calculate and plot time to intercept
-document.getElementById("ball-gen-100").onclick = genBall100
+document.getElementById("ball-gen-100").onclick = betterGenBall100
 document.getElementById("clear-landings").onclick = clearLandings
 
 
@@ -150,6 +150,11 @@ function drawPlayers(inputPlayers){
             players.selectAll('circle')
                 .call(drag);
 
+            //Initialize simulated hit recorder
+            landings = d3.select("#field").select("svg")
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
             //Initialize the ball
             ball = d3.select("#field").select("svg")
                 .append("g")
@@ -162,11 +167,6 @@ function drawPlayers(inputPlayers){
                 .attr("r",ballRad)
                 .attr("fill","red")
                 .attr("fill-opacity",0);
-
-            //Initialize simulated hit recorder
-            landings = d3.select("#field").select("svg")
-                .append("g")
-                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
             //Initialize tooltips
             Tooltip = d3.select("#field")
@@ -242,6 +242,99 @@ function genBall100(){
         calculateTimeToIntercept();
     }
 
+}
+
+function betterGenBall100() {
+
+    for (var i = 0; i < 100; i++){
+        var tempcoords;
+        var traveltime;
+        var yvelo;
+        var launchangle;
+        var exitvelo;
+
+        // Fetch the boundaries of the field and initialize an SVG point
+        let path = document.getElementById('fieldline');
+        let testpoint = document.getElementById('field-svg').createSVGPoint();
+
+        do {
+            // Generate a random angle (left field = 0 deg, right field = 90 deg) for the ball
+            var tempangle = Math.random() * Math.PI / 2 + (Math.PI / 4)
+
+            //Generate a random launch angle and velocity, preferring fly balls between 30-90 deg
+            /*
+            From the MLB: Launch Angles:
+                Ground ball: Less than 10 degrees
+                Line drive: 10-25 degrees
+                Fly ball: 25-50 degrees
+                Pop up: Greater than 50 degrees
+
+            Default league average launch angle is set at 10 degrees
+            Assume that all hits follow a normal distribution around 10 degrees,
+            with a maximum launch angle of 80 degrees
+             */
+            function randomNormal(variance) {
+                var norm = 0;
+                for (var i = 0; i < variance; i++) {
+                    norm += Math.random();
+                }
+                return norm / variance;
+            }
+
+            // Keep calculating launch angles until we get a fly ball
+            do {
+                launchangle = d3.randomNormal(10,70/3)()
+            }
+            while (launchangle < 25)
+
+            //Generate a random exit velo (from a Gaussian distribution)
+            //League average exit velo is about 89MPH, and max exit velo is around 120
+            //Therefore, standard deviation is approximately 31/3
+            exitVelo = d3.randomNormal([89],[10.33])()
+            console.log(exitVelo)
+            //exitVelo = randomNormal(4) * (120 - 58) + 58
+            //convert to feet per second
+            exitVelo *= 1.46667
+
+            var xvelo = Math.cos(launchangle * Math.PI / 180) * exitVelo
+            yvelo = Math.sin(launchangle * Math.PI / 180) * exitVelo
+
+            // Calculate traveltime using d = vi*t + 0.5(a)t^2
+            //                            t = (d - 0.5(a)t^2)/vi
+            // Assume contact height from 1.5 ft to 3.5 ft
+            // Acceleration due to gravity is -32.17 ft/s^2
+
+            var contactheight = d3.randomNormal(2.5,1/3)()
+            var traveltimearray = quadraticFormula(0.5 * gravity, yvelo, -contactheight)
+
+            if (traveltimearray[0] === 0) {
+                traveltime = null
+            } else if (traveltimearray[0] === 1) {
+                traveltime = traveltimearray[1]
+            } else {
+                traveltime = Math.max(traveltimearray[1], traveltimearray[2])
+            }
+
+            var distance = xvelo * traveltime;
+
+            tempcoords = components(distance, tempangle)
+
+            /////////Currently calculating distance, then break into components to get coordinates
+
+            // This code chunk tests if the hit ball is inside the park
+            testpoint.x = xfieldLineScale(tempcoords[0]) + fielddim / 2
+            testpoint.y = yfieldLineScale(tempcoords[1])
+        }
+        while (!(path.isPointInFill(testpoint)))
+
+        var svgcoords = [xfieldLineScale(tempcoords[0]) + fielddim / 2, yfieldLineScale(tempcoords[1])]
+
+        //set global ball position variable
+        ballpos = [svgcoords[0], svgcoords[1]]
+
+        traveltimeglobal = traveltime;
+        calculateTimeToIntercept(launchangle, exitvelo);
+    }
 }
 
 function betterGenBall() {
@@ -632,30 +725,6 @@ function calculateTimeToIntercept(launchangle,exitvelo){
      */
 }
 
-
-
-var landingmousemove = function(d) {
-    Tooltip
-        //.html("The exact value of<br>this cell is: " + d.value)
-        .attr("x",d3.select(this).attr("x"))
-        .attr("y",d3.select(this).attr("y"))/*
-        .style("left", (d3.mouse(this)[0]+70) + "px")
-        .style("top", (d3.mouse(this)[1]) + "px")
-        */
-}
-var landingmouseleave = function(d) {
-    Tooltip
-        .attr("fill-opacity",0)
-        .attr("stroke-opacity",0)
-    d3.select(this)
-        .transition()
-        .attr("stroke", "none")
-        .attr("r",2)
-        .attr("x",d=>(d.xpos-2))
-        .attr("y",d=>(d.ypos-2))
-        .attr("width",4)
-        .attr("height",4)
-}
 function clearLandings(){
     landingData = []
     landings.selectAll(".record")
