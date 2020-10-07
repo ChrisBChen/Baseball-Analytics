@@ -62,9 +62,10 @@ drawPlayers("data/players.csv");
 
 //Button presses
 // Activates to generate random ball position
-document.getElementById("ball-gen").onclick = genBall
+document.getElementById("ball-gen").onclick = betterGenBall
 // Activates to calculate and plot time to intercept
 document.getElementById("ball-gen-100").onclick = genBall100
+document.getElementById("clear-landings").onclick = clearLandings
 
 
 function drawField(){
@@ -251,8 +252,8 @@ function genBall100(){
 }
 
 function betterGenBall() {
-    var tempx;
-    var tempy;
+    var tempcoords;
+    var traveltime;
 
     // Fetch the boundaries of the field and initialize an SVG point
     let path = document.getElementById('fieldline');
@@ -260,7 +261,7 @@ function betterGenBall() {
 
     do {
         // Generate a random angle (left field = 0 deg, right field = 90 deg) for the ball
-        var tempangle = Math.random() * Math.PI/2
+        var tempangle = Math.random() * Math.PI/2 + (Math.PI/4)
 
         //Generate a random launch angle and velocity, preferring fly balls between 30-90 deg
         /*
@@ -281,31 +282,62 @@ function betterGenBall() {
             }
             return norm / variance;
         }
-        var launchangle
+        var launchangle;
         // Keep calculating launch angles until we get a fly ball
         do {
-            var launchangle = randomNormal(4) * (80 - (-60)) + 10
+            var launchangle = randomNormal(4) * (80 - (-60)) - 60
         }
         while (launchangle < 25)
+        console.log("Launch Angle: " + launchangle)
 
         //Generate a random exit velo (from a Gaussian distribution)
         //League average exit velo is about 89MPH, and max exit velo is around 120
         let exitVelo = randomNormal(4) * (120 - 58) + 58
+        console.log("Exit Velo: " + exitVelo + "mph")
         //convert to feet per second
         exitVelo *= 1.46667
 
+        var xvelo = Math.cos(launchangle * Math.PI/180) * exitVelo
+        var yvelo = Math.sin(launchangle * Math.PI/180) * exitVelo
+
+        // Calculate traveltime using d = vi*t + 0.5(a)t^2
+        //                            t = (d - 0.5(a)t^2)/vi
+        // Assume contact height from 1.5 ft to 3.5 ft
+        // Acceleration due to gravity is -32.17 ft/s^2
+        const gravity = -32.17
+        var contactrange = [1.5,3.5]
+        var contactheight = randomNormal(4)*(contactrange[1]-contactrange[0]) + contactrange[0]
+        console.log("a = " + (0.5*gravity))
+        console.log("b = " + yvelo)
+        console.log("c = " + (-contactheight))
+        var traveltimearray = quadraticFormula(0.5*gravity,yvelo,-contactheight)
+
+        if (traveltimearray[0] === 0){
+            traveltime = null
+        }
+        else if (traveltimearray[0] === 1){
+            traveltime = traveltimearray[1]
+        }
+        else {
+            traveltime = Math.max(traveltimearray[1],traveltimearray[2])
+        }
+        console.log("Travel Time: " + traveltime + " sec")
+
+        var distance = xvelo * traveltime;
+
+        tempcoords = components(distance,tempangle)
+
         /////////Currently calculating distance, then break into components to get coordinates
 
-        tempx = Math.random() * height
-        tempy = Math.random() * height
-
         // This code chunk tests if the hit ball is inside the park
-        testpoint.x = tempx
-        testpoint.y = tempy
+        testpoint.x = xfieldLineScale(tempcoords[0]) + fielddim/2
+        testpoint.y = yfieldLineScale(tempcoords[1])
         console.log(testpoint.x, testpoint.y)
-        console.log('Point at 30,30:', path.isPointInFill(testpoint));
+        console.log('Point test:', path.isPointInFill(testpoint));
     }
     while (!(path.isPointInFill(testpoint)))
+
+    var svgcoords = [xfieldLineScale(tempcoords[0]) + fielddim/2,yfieldLineScale(tempcoords[1])]
 
     //Plot the ball in the field
     d3.select("#ball")
@@ -315,14 +347,37 @@ function betterGenBall() {
         .attr("cy",yfieldLineScale(0))
         .transition()
         .attr("fill-opacity",100)
-        .attr("cx",tempx)
-        .attr("cy",tempy)
+        .attr("cx",svgcoords[0])
+        .attr("cy",svgcoords[1])
 
     //set global ball position variable
-    ballpos = [tempx,tempy]
+    ballpos = [svgcoords[0],svgcoords[1]]
 
-    traveltimeglobal = calculateTravelTime();
+    traveltimeglobal = traveltime;
     calculateTimeToIntercept();
+}
+
+//Runs the quadratic formula, returning various different outputs
+function quadraticFormula(a,b,c){
+    var determinant = Math.pow(b,2) - 4*a*c
+    console.log(determinant)
+    if (determinant < 0){
+        return [0]
+    }
+    else if (determinant === 0){
+        var eq = -b /(2*a)
+        return [1,eq]
+    }
+    else {
+        var eqplus = (-b + Math.sqrt(determinant))/(2*a)
+        var eqminus = (-b - Math.sqrt(determinant))/(2*a)
+        return [2,eqplus,eqminus]
+    }
+}
+
+//Finds the x and y components of a certain distance of hit, assuming it originated from (0,0)
+function components(distance,angle){
+    return [Math.cos(angle)*distance,Math.sin(angle)*distance]
 }
 
 //This function calculates the travel time of the baseball using a random exit velocity
@@ -399,6 +454,11 @@ function calculateTimeToIntercept(){
     }
 
      */
+}
+
+function clearLandings(){
+    landings.selectAll(".record")
+        .remove()
 }
 
 // Input: Field position of player (e.g. 3B, SS)
