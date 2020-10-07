@@ -1,3 +1,5 @@
+//NOTE: player sprint speed is in ft/s
+
 let margin = {top: 40, right: 10, bottom: 60, left: 60};
 
 let width = 600 - margin.left - margin.right,
@@ -9,6 +11,16 @@ let fielddim = 500;
 //Set player radius
 let playerRad = 5
 let ballRad = 2.5
+
+//Set maximum batter exit velo; default is 120 mph
+let maxExitVeloMPH = 120
+let maxExitVelofps = maxExitVeloMPH * 1.46667
+//Set minimum batter exit velo; default is 60 mph
+let minExitVeloMPH = 60
+let minExitVelofps = minExitVeloMPH * 1.46667
+//Set average batter exit angle; default is 30 degrees
+let exitAngleDeg = 30
+let exitAngleRad = exitAngleDeg / 180 * Math.PI
 
 //Distance of the foul line to the fence from homeplate, in feet
 // (i.e. home plate to left field wall, along the foul line)
@@ -28,12 +40,23 @@ let yfieldLineScale = d3.scaleLinear()
 let xfieldLineScale = d3.scaleLinear()
     .domain([-oFFDy,oFFDy])
     .range([-250,250])
+
+//Initialize global variables
 var players;
 var field;
 var ball;
+var ballpos = [];
+
+//Initialization functions
 drawField();
 drawPlayers("data/players.csv");
+
+//Button presses
+// Activates to generate random ball position
 document.getElementById("ball-gen").onclick = genBall
+// Activates to calculate and plot time to intercept
+
+
 
 function drawField(){
     field = d3.select("#field").append("svg")
@@ -141,6 +164,7 @@ function dragended(d) {
     //d3.select(this).classed('active', false);
 }
 
+//Function to randomly generate a ball location on the field
 function genBall(){
 
     var tempx;
@@ -163,6 +187,7 @@ function genBall(){
     }
     while (!(path.isPointInFill(testpoint)))
 
+    //Plot the ball in the field
     d3.select("#ball")
         .transition()
         .duration(250)
@@ -173,6 +198,32 @@ function genBall(){
         .attr("cx",tempx)
         .attr("cy",tempy)
 
+    //Enable the field ball button
+    d3.select("#field-ball")
+        .attr("disabled",null)
+
+    //set global ball position variable
+    ballpos = [tempx,tempy]
+
+    calculateTravelTime();
+}
+
+//This function calculates the travel time of the baseball using a random exit velocity
+function calculateTravelTime(){
+    var tempv = Math.random() * (maxExitVelofps - minExitVelofps) + minExitVelofps
+    console.log("Tempv: " + tempv)
+    var tempxv = tempv * Math.cos(exitAngleRad)
+    console.log("Tempxv: " + tempxv)
+    var fieldx = xfieldLineScale.invert(ballpos[0] - fielddim/2);
+    var fieldy = yfieldLineScale.invert(ballpos[1]);
+
+    console.log("fieldx and fieldy:" + fieldx, fieldy)
+
+    var distance = Math.sqrt(Math.pow(fieldx,2) + Math.pow(fieldy,2));
+
+    var traveltime = distance / tempxv;
+
+    console.log("Travel Time: " + traveltime)
 }
 
 // Input: Field position of player (e.g. 3B, SS)
