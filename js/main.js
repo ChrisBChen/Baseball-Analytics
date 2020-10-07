@@ -8,7 +8,7 @@ let width = 600 - margin.left - margin.right,
 //Separate field dimensions without margins
 let fielddim = 500;
 
-//Set player radius
+//Set player and ball icon radii
 let playerRad = 5
 let ballRad = 2.5
 
@@ -21,6 +21,12 @@ let minExitVelofps = minExitVeloMPH * 1.46667
 //Set average batter exit angle; default is 30 degrees
 let exitAngleDeg = 30
 let exitAngleRad = exitAngleDeg / 180 * Math.PI
+//Set player reaction time; default is 0.2 sec for infield and 0.5 sec for outfield
+let rtimeInfield = 0.2
+let rtimeOutfield = 0.5
+
+//Set who is in the outfield
+let outfield = ["LF","CF","RF"]
 
 //Distance of the foul line to the fence from homeplate, in feet
 // (i.e. home plate to left field wall, along the foul line)
@@ -45,7 +51,10 @@ let xfieldLineScale = d3.scaleLinear()
 var players;
 var field;
 var ball;
+var landings;
 var ballpos = [];
+var csvData;
+var traveltimeglobal;
 
 //Initialization functions
 drawField();
@@ -55,7 +64,7 @@ drawPlayers("data/players.csv");
 // Activates to generate random ball position
 document.getElementById("ball-gen").onclick = genBall
 // Activates to calculate and plot time to intercept
-
+document.getElementById("field-ball").onclick = calculateTimeToIntercept
 
 
 function drawField(){
@@ -98,7 +107,7 @@ function drawPlayers(inputPlayers){
         return row;
     })
         .then(data => {
-
+            csvData = data;
             // Define player group
             players = d3.select("#field").select("svg")
                 .append("g")
@@ -142,6 +151,11 @@ function drawPlayers(inputPlayers){
                 .attr("r",ballRad)
                 .attr("fill","red")
                 .attr("fill-opacity",0);
+
+            //Initialize simulated hit recorder
+            landings = d3.select("#field").select("svg")
+                .append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
         })
 }
@@ -205,7 +219,7 @@ function genBall(){
     //set global ball position variable
     ballpos = [tempx,tempy]
 
-    calculateTravelTime();
+    traveltimeglobal = calculateTravelTime();
 }
 
 //This function calculates the travel time of the baseball using a random exit velocity
@@ -219,11 +233,69 @@ function calculateTravelTime(){
 
     console.log("fieldx and fieldy:" + fieldx, fieldy)
 
-    var distance = Math.sqrt(Math.pow(fieldx,2) + Math.pow(fieldy,2));
-
+    var distance = distancecalc(fieldx,fieldy,0,0);
     var traveltime = distance / tempxv;
 
     console.log("Travel Time: " + traveltime)
+    return traveltime
+}
+
+function distancecalc(x1, y1, x2, y2){
+    return Math.sqrt(Math.pow(x2 - x1,2) + Math.pow(y2 - y1,2));
+}
+
+function calculateTimeToIntercept(){
+    // Store the player position closest to the ball and the time to intercept
+    var mintime = [null,0]
+    console.log(csvData)
+    var tempx;
+    var tempy;
+    var temptti;
+    d3.selectAll(".player").each(function(d,i) {
+        tempx = d3.select(this).attr("cx")
+        tempy = d3.select(this).attr("cy")
+        temptti = distancecalc(
+            xfieldLineScale.invert(ballpos[0] - fielddim/2),
+            yfieldLineScale.invert(ballpos[1]),
+            xfieldLineScale.invert(tempx - fielddim/2),
+            yfieldLineScale.invert(tempy)) / csvData[i].speed
+
+        if (outfield.includes(d3.select(this).attr("id"))){
+            temptti += rtimeOutfield
+        }
+        else {
+            temptti += rtimeInfield
+        }
+
+        if (i === 0 || temptti < mintime[1]){
+            mintime = [d3.select(this).attr("id"),temptti]
+        }
+    })
+    console.log(mintime)
+    if (mintime[1] < traveltimeglobal){
+        landings.append("circle")
+            .attr("class","record fielded")
+            .attr("fill","green")
+            .attr("cx",ballpos[0])
+            .attr("cy",ballpos[1])
+            .attr("r",2)
+    }
+    else {
+        landings.append("rect")
+            .attr("class","record not-fielded")
+            .attr("fill","red")
+            .attr("x",ballpos[0]-1)
+            .attr("y",ballpos[1]-1)
+            .attr("width",2)
+            .attr("height",2)
+    }
+    /*
+    for (var i = 0; i < csvData.length; i++){
+        console.log("Checking " + csvData[i].firstname + csvData[i].lastname + "...")
+
+    }
+
+     */
 }
 
 // Input: Field position of player (e.g. 3B, SS)
