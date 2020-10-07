@@ -42,6 +42,7 @@ function drawField(){
         .attr("id","field")
         .attr("stroke","black")
         .attr("fill","white")
+        .attr('pointer-events', 'all')
         .attr("d","M 250 450 L " +
             (fielddim/2 + xfieldLineScale(-oFFDy)) + " " + yfieldLineScale(oFFDy) +
             " Q 100 50 250 50 Q 400 50 " +
@@ -70,15 +71,18 @@ function drawPlayers(inputPlayers){
     })
         .then(data => {
 
+            // Define player group
             let players = d3.select("#field").select("svg")
                 .append("g")
                 .attr("id","players")
                 .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
+            // Draw players
             players.selectAll("circle")
                 .data(data)
                 .enter()
                 .append("circle")
+                .attr("class","player")
                 .attr("id",d => d.position)
                 .attr("r",playerRad)
                 .attr("cx",d => {
@@ -87,8 +91,38 @@ function drawPlayers(inputPlayers){
                 .attr("cy",d => {
                     return yfieldLineScale(positionSVGCoords(d.position,"y"))
                 })
+                .attr("fill","blue")
+
+            // Define individual drag functionalities
+            let drag = d3.drag()
+                .on('start', dragstarted)
+                .on('drag', dragged)
+                .on('end', dragended);
+
+            //Add drag capabilities to players
+            players.selectAll('circle')
+                .call(drag);
+
 
         })
+}
+
+function dragstarted(d) {
+    //d3.select(self).raise().classed('active', true);
+}
+
+// Move players when dragged
+function dragged(event) {
+    console.log(event.x)
+    let tempx = xfieldLineScale.invert(event.x - fielddim/2);
+    let tempy = yfieldLineScale.invert(event.y);
+    d3.select(this)
+        .attr('cx', xfieldLineScale(tempx) + fielddim/2)
+        .attr('cy', yfieldLineScale(tempy))
+}
+
+function dragended(d) {
+    //d3.select(this).classed('active', false);
 }
 
 // Input: Field position of player (e.g. 3B, SS)
