@@ -346,14 +346,18 @@ function betterGenBall() {
     var yvelo;
     var launchangle;
     var exitvelo;
+    var grounderdata = [];
+    var forceFlyBall = false;
 
     // Fetch the boundaries of the field and initialize an SVG point
     let path = document.getElementById('fieldline');
     let testpoint = document.getElementById('field-svg').createSVGPoint();
 
+    // Generate a random angle (left field = 0 deg, right field = 90 deg) for the ball
+    var tempangle = Math.random() * Math.PI/2 + (Math.PI/4)
+
     do {
-        // Generate a random angle (left field = 0 deg, right field = 90 deg) for the ball
-        var tempangle = Math.random() * Math.PI/2 + (Math.PI/4)
+
 
         //Generate a random launch angle and velocity, preferring fly balls between 30-90 deg
         /*
@@ -367,17 +371,33 @@ function betterGenBall() {
         Assume that all hits follow a normal distribution around 10 degrees,
         with a maximum launch angle of 80 degrees
          */
-        // Keep calculating launch angles until we get a fly ball
+        // Keep calculating launch angles until we get a fly ball or ground ball (aka not a line drive)
+        var approved;
+
         do {
             launchangle = d3.randomNormal(10,70/3)()
+
+            if (forceFlyBall){
+                approved = (launchangle < 25)
+            }
+            else{
+                approved = (launchangle < 25 && launchangle >= 10)
+            }
+
         }
-        while (launchangle < 25)
+        while (approved)
+
+        //Since we check for "inside the park" differently, this allows us to actually
+        //maintain an even distribution of fly balls and grounders
+        if (launchangle >= 25){
+            forceFlyBall = true;
+        }
+
         console.log("Launch Angle: " + launchangle)
 
         //Generate a random exit velo (from a Gaussian distribution)
         //League average exit velo is about 89MPH, and max exit velo is around 120
         exitVelo = d3.randomNormal([89],[10.33])()
-        console.log("Exit Velo: " + exitVelo + "mph")
         //convert to feet per second
         exitVelo *= 1.46667
 
@@ -390,6 +410,16 @@ function betterGenBall() {
         // Acceleration due to gravity is -32.17 ft/s^2
 
         var contactheight = d3.randomNormal(2.5,1/3)()
+
+        // Calculate intercept point for ground ball (if any)
+        //
+        if (launchangle < 10 && !forceFlyBall){
+            grounderdata = groundBallTTI(tempangle,xvelo,launchangle,exitVelo);
+            break;
+        }
+
+
+
         var traveltimearray = quadraticFormula(0.5*gravity,yvelo,-contactheight)
 
         if (traveltimearray[0] === 0){
@@ -401,7 +431,6 @@ function betterGenBall() {
         else {
             traveltime = Math.max(traveltimearray[1],traveltimearray[2])
         }
-        console.log("Travel Time: " + traveltime + " sec")
 
         var distance = xvelo * traveltime;
 
@@ -417,51 +446,453 @@ function betterGenBall() {
     }
     while (!(path.isPointInFill(testpoint)))
 
-    var svgcoords = [xfieldLineScale(tempcoords[0]) + fielddim/2,yfieldLineScale(tempcoords[1])]
-    var halfsvgcoords = [xfieldLineScale(tempcoords[0]/2) + fielddim/2,yfieldLineScale(tempcoords[1]/2)]
+    console.log("Grounder data's length is " + grounderdata.length)
 
-    //Create scale for ball size based on height
-    //calculate max height reached using d = vi^2/(-2a)
-    ballheight = Math.pow(yvelo,2)/(-2*gravity)
-    //Maximum possible height given a 90-degree angle and 120mph exit velo is approx. 1579
-    let ballScale = d3.scaleLinear()
-        .domain([0,1579])
-        .range([5,15]);
+    if (grounderdata.length != 0){
+        //grounderdata's format: svg xposition, svg yposition, time to intercept, boolean fielded?
+        ballpos = [grounderdata[0],grounderdata[1]]
+        traveltimeglobal = grounderdata[2]
+        var caught = grounderdata[3]
 
-    //set global ball position variable
-    ballpos = [svgcoords[0],svgcoords[1]]
+        filterByHit()
 
-    traveltimeglobal = traveltime;
+        d3.select("#ball")
+            .transition()
+            .duration(250)
+            .attr("fill",function(){
+                if (caught){return "green"}
+                else {return "red"}
+            })
+            .attr("cx",xfieldLineScale(0) + fielddim/2)
+            .attr("cy",yfieldLineScale(0))
+            .transition()
+            .duration(traveltimeglobal * 1000)
+            .attr("fill-opacity",100)
+            .attr("cx",ballpos[0])
+            .attr("cy",ballpos[1])
+            .attr("r",ballRad)
+    }
+    else{
+        var svgcoords = [xfieldLineScale(tempcoords[0]) + fielddim/2,yfieldLineScale(tempcoords[1])]
+        var halfsvgcoords = [xfieldLineScale(tempcoords[0]/2) + fielddim/2,yfieldLineScale(tempcoords[1]/2)]
 
-    var caught = calculateTimeToIntercept(launchangle,exitvelo);
+        //Create scale for ball size based on height
+        //calculate max height reached using d = vi^2/(-2a)
+        ballheight = Math.pow(yvelo,2)/(-2*gravity)
+        //Maximum possible height given a 90-degree angle and 120mph exit velo is approx. 1579
+        let ballScale = d3.scaleLinear()
+            .domain([0,1579])
+            .range([5,15]);
 
-    //Edit opacity depending on the type of ball
-    filterByHit()
+        //set global ball position variable
+        ballpos = [svgcoords[0],svgcoords[1]]
 
-    //Plot the ball in the field
-    d3.select("#ball")
-        .transition()
-        .duration(250)
-        .attr("fill",function(){
-            if (caught){return "green"}
-            else {return "red"}
+        traveltimeglobal = traveltime;
+
+        var caught = calculateTimeToIntercept(launchangle,exitvelo);
+
+        //Edit opacity depending on the type of ball
+        filterByHit()
+
+        //Plot the ball in the field
+        d3.select("#ball")
+            .transition()
+            .duration(250)
+            .attr("fill",function(){
+                if (caught){return "green"}
+                else {return "red"}
+            })
+            .attr("cx",xfieldLineScale(0) + fielddim/2)
+            .attr("cy",yfieldLineScale(0))
+            .transition()
+            .ease(d3.easeLinear)
+            .duration(traveltime * 500)
+            .attr("fill-opacity",100)
+            .attr("cx",halfsvgcoords[0])
+            .attr("cy",halfsvgcoords[1])
+            .attr("r",ballScale(ballheight))
+            .transition()
+            .ease(d3.easeLinear)
+            .duration(traveltime * 500)
+            .attr("cx",svgcoords[0])
+            .attr("cy",svgcoords[1])
+            .attr("r",ballRad)
+    }
+
+
+
+}
+
+//Calculate timetointercept for a ground ball
+/*
+acceleration = 0.5 * g (coefficient of friction times gravity)
+
+We assume that ground balls hit the ground immediately and start decelerating at deltaT seconds after contact. After
+every deltaT seconds, we calculate the location of the ball and check if it's hit its maximum roll distance.
+Find the position of the closest player and calculate the time to intercept (including reaction time) to arrive at the
+ball's current position.
+
+maxdistancetime = v0/(a)
+maxdistance = v0^2/2(a)
+maxdistancecomponents = components(maxdistance,tempangle)
+tempx = 0
+tempy = 0
+calculate x component of velocity
+calculate y component of velocity
+var mintime = [null,0]
+
+do {
+    elapsed time += deltaT
+    tempx += xvelocity * deltaT
+    tempy += yvelocity * deltaT
+    if elapsed time > maxdistancetime {
+        elapsed time = maxdistancetime
+        tempx = maxdistancecomponents[0]
+        tempy = maxdistancecomponents[1]
+    }
+
+
+    mintime = tti(tempx,tempy)
+
+
+}
+while (ball is not at maximum roll distance AND time to intercept the ball is greater than elapsed time since contact)
+aka while (elapsed time < maxdistancetime && elapsed time < mintime[1])
+
+Record the x and y coordinates of the interception (tempx and tempy)
+Calculate amount of time to throw the ball to first
+Sum: mintime[1], ball transfer time, throw-to-first time
+If an out can be made:
+    Plot the x and y coordinates of the ball in green
+    Tag this ball with the player who made the out
+    Plot a line from home plate to the ball in transparent green
+    Return the x and y coordinates of the ball and the time since contact
+If an out cannot be made:
+    Plot the x and y coordinates of the ball in red
+    Tag this ball with the player who was closest to the out
+    Plot a line from home plate to the ball in transparent red
+    Return the x and y coordinates of the ball and the time since contact
+
+ */
+function groundBallTTI(tempangle,xvelo,launchangle,exitvelo){
+    //Inputs:
+    // tempangle: directional angle (left vs. right field) in radians
+    // xvelo: x component of exit velocity, in ft/s
+    console.log("---------------")
+    console.log("GROUND BALL")
+    let path = document.getElementById('fieldline');
+    let testpoint = document.getElementById('field-svg').createSVGPoint()
+
+    //Setting time step, default 0.1
+    var deltaT = 0.1
+
+    //Setting ball coefficient of friction, default 0.5
+    const ballfric = 0.5
+    const ballacc = -ballfric*gravity
+
+    //Calculate time until maximum rolling distance is achieved (when the ball stops rolling)
+    var maxdistancetime = xvelo / ballacc
+    //Calculate maximum rolling distance of the ball (when friction stops it from rolling further)
+    var maxdistance = Math.pow(xvelo,2)/(2*ballacc)
+    var maxdistancecomponents = components(maxdistance,tempangle)
+    var xvelocomponents = components(xvelo,tempangle)
+    var tempx = 0
+    var tempy = 0
+    var mintime = [null,0]
+    var elapsedtime = 0;
+    var stepx = 0;
+    var stepy = 0;
+
+    console.log("Max Distance Time: " + maxdistancetime)
+    console.log("Max Distance: " + maxdistance)
+    console.log("tempangle: " + (tempangle*180/Math.PI))
+
+    do {
+        //Step the distances one forwards and check if we've exited the stadium
+        stepx += xvelocomponents[0] * deltaT;
+        stepy += xvelocomponents[1] * deltaT;
+        testpoint.x = xfieldLineScale(stepx) + fielddim/2
+        testpoint.y = yfieldLineScale(stepy)
+        if (!(path.isPointInFill(testpoint))){
+            console.log("HIT THE WALL =====================")
+            break;
+        }
+
+        //Update elapsed time and the current coordinates
+        elapsedtime += deltaT;
+        tempx = stepx;
+        tempy = stepy;
+
+        //Adjust if we've reached maximum distance
+        if (elapsedtime > maxdistancetime) {
+            elapsedtime = maxdistancetime;
+            tempx = maxdistancecomponents[0];
+            tempy = maxdistancecomponents[1];
+        }
+
+        //Calculate which player is closest to the ball
+        mintime = tti(xfieldLineScale(tempx) + fielddim/2, yfieldLineScale(tempy))
+        console.log("Time: " + elapsedtime)
+        console.log("Position: " + tempx + ", " + tempy)
+        console.log("mintime" + mintime[0] + " " + mintime[1])
+    }
+    while (elapsedtime < maxdistancetime && elapsedtime < mintime[1])
+
+    console.log(tempx,tempy)
+    var timetofirst = throwtofirst(mintime[0],tempx,tempy)
+
+    //set ball transfer time from fielding the ball to throwing (release time)
+    var transfertime = 0.2
+
+    //set time for runner from home to 1st; default to MLB average of 4.25s (4.3 righty, 4.2 lefty)
+    var runnertime = 4.25
+
+    //Calculate total time from contact to the ball arriving at first
+    var totaltime = mintime[1] + transfertime + timetofirst
+
+    console.log("33333333333333333333")
+    console.log("TTI: " + mintime[1])
+    console.log("timetofirst: " + timetofirst)
+    console.log("Total time: " + totaltime)
+    var hittype = "Ground Ball"
+    if (totaltime < runnertime){
+        console.log("A play has been made!")
+
+        landingData.push({
+            type: hittype,
+            xpos: (xfieldLineScale(tempx) + fielddim/2),
+            ypos: yfieldLineScale(tempy),
+            launchangle: launchangle,
+            exitvelo: exitvelo,
+            traveltime: mintime[1],
+            fielded: true,
+            closestplayer: mintime[0]
         })
-        .attr("cx",xfieldLineScale(0) + fielddim/2)
-        .attr("cy",yfieldLineScale(0))
-        .transition()
-        .ease(d3.easeLinear)
-        .duration(traveltime * 500)
-        .attr("fill-opacity",100)
-        .attr("cx",halfsvgcoords[0])
-        .attr("cy",halfsvgcoords[1])
-        .attr("r",ballScale(ballheight))
-        .transition()
-        .ease(d3.easeLinear)
-        .duration(traveltime * 500)
-        .attr("cx",svgcoords[0])
-        .attr("cy",svgcoords[1])
-        .attr("r",ballRad)
 
+        landings.selectAll("line.ground-ball.fielded")
+            .data(landingData.filter(function(d) { return (d.fielded && d.type === "Ground Ball"); }))
+            .enter()
+            .append("line")
+            .attr("class","record fielded line " + hyphenate(hittype))
+            .attr("x1",xfieldLineScale(0) + fielddim/2)
+            .attr("y1",yfieldLineScale(0))
+            .attr("x2",d=>d.xpos)
+            .attr("y2",d=>d.ypos)
+            .attr("stroke","#90ee90")
+            .attr("stroke-opacity",1)
+
+        landings.selectAll("circle.ground-ball.fielded")
+            .data(landingData.filter(function(d) { return (d.fielded && d.type === "Ground Ball"); }))
+            .enter()
+            .append("circle")
+            .attr("class","record fielded " + hyphenate(hittype))
+            .attr("fill","green")
+            .attr("cx",d=>d.xpos)
+            .attr("cy",d=>d.ypos)
+            .attr("fill-opacity",1)
+            .attr("r",2)
+            .on("mouseover", function(mouse,data) {
+                Tooltip.select(".tooltip-custom")
+                    .attr("x",mouse.offsetX + 8)
+                    .attr("y",mouse.offsetY - tooltipheight - 5)
+                    .attr("height",tooltipheight)
+                    .attr("width",tooltipwidth)
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",1)
+                    .attr("stroke-opacity",1);
+
+                Tooltip.select(".tooltip-text")
+                    .attr("x",mouse.offsetX + 10)
+                    .attr("y",mouse.offsetY - 10)
+                    .text(data.type + ": " + d3.format(".1f")(data.traveltime) + "s.")
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",1)
+
+
+                console.log(data)
+                console.log(mouse)
+                d3.select(this)
+                    .transition()
+                    .duration(150)
+                    .attr("stroke", "black")
+                    .attr("r",5)
+                    .attr("x",d=>(d.xpos-4))
+                    .attr("y",d=>(d.ypos-4))
+                    .attr("width",8)
+                    .attr("height",8)
+            })
+            .on("mouseleave", function(d) {
+                Tooltip.select(".tooltip-custom")
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",0)
+                    .attr("stroke-opacity",0)
+                    .transition()
+                    .duration(0)
+                    .attr("height",0)
+                    .attr("width",0);
+
+                Tooltip.select(".tooltip-text")
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",0)
+                    .transition()
+                    .duration(0)
+                    .text("")
+                d3.select(this)
+                    .transition()
+                    .duration(150)
+                    .attr("stroke", "none")
+                    .attr("r",2)
+                    .attr("x",d=>(d.xpos-2))
+                    .attr("y",d=>(d.ypos-2))
+                    .attr("width",4)
+                    .attr("height",4)
+            })
+
+        //Return: svg xposition, svg yposition, time to intercept, boolean fielded?
+        return [(xfieldLineScale(tempx) + fielddim/2),yfieldLineScale(tempy),mintime[1],true]
+    }
+    else {
+        console.log("The runner is safe...")
+
+        landingData.push({
+            type: hittype,
+            xpos: (xfieldLineScale(tempx) + fielddim/2),
+            ypos: yfieldLineScale(tempy),
+            launchangle: launchangle,
+            exitvelo: exitvelo,
+            traveltime: mintime[1],
+            fielded: false,
+            closestplayer: mintime[0]
+        })
+
+        landings.selectAll("line.ground-ball.not-fielded")
+            .data(landingData.filter(function(d) { return (!d.fielded && d.type === "Ground Ball"); }))
+            .enter()
+            .append("line")
+            .attr("class","record not-fielded line " + hyphenate(hittype))
+            .attr("x1",xfieldLineScale(0) + fielddim/2)
+            .attr("y1",yfieldLineScale(0))
+            .attr("x2",d=>d.xpos)
+            .attr("y2",d=>d.ypos)
+            .attr("stroke","#ffcccb")
+            .attr("stroke-opacity",1)
+
+        landings.selectAll("circle.ground-ball.not-fielded")
+            .data(landingData.filter(function(d) { return ((!d.fielded) && d.type === "Ground Ball"); }))
+            .enter()
+            .append("circle")
+            .attr("class","record not-fielded " + hyphenate(hittype))
+            .attr("fill","red")
+            .attr("cx",d=>d.xpos)
+            .attr("cy",d=>d.ypos)
+            .attr("fill-opacity",1)
+            .attr("r",2)
+            .on("mouseover", function(mouse,data) {
+                Tooltip.select(".tooltip-custom")
+                    .attr("x",mouse.offsetX + 8)
+                    .attr("y",mouse.offsetY - tooltipheight - 5)
+                    .attr("height",tooltipheight)
+                    .attr("width",tooltipwidth)
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",1)
+                    .attr("stroke-opacity",1);
+
+                Tooltip.select(".tooltip-text")
+                    .attr("x",mouse.offsetX + 10)
+                    .attr("y",mouse.offsetY - 10)
+                    .text(data.type + ": " + d3.format(".1f")(data.traveltime) + "s.")
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",1)
+
+
+                console.log(data)
+                console.log(mouse)
+                d3.select(this)
+                    .transition()
+                    .duration(150)
+                    .attr("stroke", "black")
+                    .attr("r",5)
+                    .attr("x",d=>(d.xpos-4))
+                    .attr("y",d=>(d.ypos-4))
+                    .attr("width",8)
+                    .attr("height",8)
+            })
+            .on("mouseleave", function(d) {
+                Tooltip.select(".tooltip-custom")
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",0)
+                    .attr("stroke-opacity",0)
+                    .transition()
+                    .duration(0)
+                    .attr("height",0)
+                    .attr("width",0);
+
+                Tooltip.select(".tooltip-text")
+                    .transition()
+                    .duration(150)
+                    .attr("fill-opacity",0)
+                    .transition()
+                    .duration(0)
+                    .text("")
+                d3.select(this)
+                    .transition()
+                    .duration(150)
+                    .attr("stroke", "none")
+                    .attr("r",2)
+                    .attr("x",d=>(d.xpos-2))
+                    .attr("y",d=>(d.ypos-2))
+                    .attr("width",4)
+                    .attr("height",4)
+            })
+
+
+
+        //Return: svg xposition, svg yposition, time to intercept, boolean fielded?
+        return [(xfieldLineScale(tempx) + fielddim/2),yfieldLineScale(tempy),mintime[1],false]
+    }
+
+    /*
+    Record the x and y coordinates of the interception (tempx and tempy)
+    Calculate amount of time to throw the ball to first
+    Sum: mintime[1], ball transfer time, throw-to-first time
+    If an out can be made:
+        Plot the x and y coordinates of the ball in green
+        Tag this ball with the player who made the out
+        Plot a line from home plate to the ball in transparent green
+        Return the x and y coordinates of the ball and the time since contact
+    If an out cannot be made:
+        Plot the x and y coordinates of the ball in red
+        Tag this ball with the player who was closest to the out
+        Plot a line from home plate to the ball in transparent red
+        Return the x and y coordinates of the ball and the time since contact
+    */
+}
+
+//Calculates how long it takes to throw a ball to first base, given player position and
+//physical location
+const firstbaselocation = components(90,Math.PI/4)
+function throwtofirst(playerposition,x,y){
+    //throwspeed: speed of player throw in ft/s; in the future, adjust for player arm strength
+    //currently defaulting to 90mph
+    const throwspeed = 90 * 1.46667
+
+    var distancetofirst = distancecalc(x,y,firstbaselocation[0],firstbaselocation[1])
+
+    //Calculate throwing angle based on distance from first and throwing speed
+    //Using Newtonian physics
+    var throwangle = Math.asin(-distancetofirst*gravity/(Math.pow(throwspeed,2))) / 2
+
+    //Calculate x component of velocity based on throwangle
+    var xthrowspeed = throwspeed * Math.cos(throwangle)
+
+    return distancetofirst/xthrowspeed
 }
 
 //Runs the quadratic formula, returning various different outputs
@@ -485,24 +916,6 @@ function quadraticFormula(a,b,c){
 //Finds the x and y components of a certain distance of hit, assuming it originated from (0,0)
 function components(distance,angle){
     return [Math.cos(angle)*distance,Math.sin(angle)*distance]
-}
-
-//This function calculates the travel time of the baseball using a random exit velocity
-function calculateTravelTime(){
-    var tempv = Math.random() * (maxExitVelofps - minExitVelofps) + minExitVelofps
-    console.log("Tempv: " + tempv)
-    var tempxv = tempv * Math.cos(exitAngleRad)
-    console.log("Tempxv: " + tempxv)
-    var fieldx = xfieldLineScale.invert(ballpos[0] - fielddim/2);
-    var fieldy = yfieldLineScale.invert(ballpos[1]);
-
-    console.log("fieldx and fieldy:" + fieldx, fieldy)
-
-    var distance = distancecalc(fieldx,fieldy,0,0);
-    var traveltime = distance / tempxv;
-
-    console.log("Travel Time: " + traveltime)
-    return traveltime
 }
 
 function distancecalc(x1, y1, x2, y2){
@@ -537,8 +950,38 @@ function hyphenate(str){
     return str.replace(/\s+/g, '-').toLowerCase();
 }
 
+function tti(xcoord,ycoord){
+    var mintime = [null,0]
+    var tempx;
+    var tempy;
+    var temptti;
+    d3.selectAll(".player").each(function(d,i) {
+        tempx = d3.select(this).attr("cx")
+        tempy = d3.select(this).attr("cy")
+        temptti = distancecalc(
+            xfieldLineScale.invert(xcoord - fielddim/2),
+            yfieldLineScale.invert(ycoord),
+            xfieldLineScale.invert(tempx - fielddim/2),
+            yfieldLineScale.invert(tempy)) / csvData[i].speed
+
+        if (outfield.includes(d3.select(this).attr("id"))){
+            temptti += rtimeOutfield
+        }
+        else {
+            temptti += rtimeInfield
+        }
+
+        if (i === 0 || temptti < mintime[1]){
+            mintime = [d3.select(this).attr("id"),temptti]
+        }
+    })
+    return mintime
+}
+
 function calculateTimeToIntercept(launchangle,exitvelo){
     // Store the player position closest to the ball and the time to intercept
+
+    /*
     var mintime = [null,0]
     console.log(csvData)
     var tempx;
@@ -564,10 +1007,17 @@ function calculateTimeToIntercept(launchangle,exitvelo){
             mintime = [d3.select(this).attr("id"),temptti]
         }
     })
+
+     */
+    console.log("Pre-mintime")
+    var mintime = tti(ballpos[0],ballpos[1])
+    console.log("Post-mintime: ")
     console.log(mintime)
 
     // Record what type of hit
     var hittype = typeofhit(launchangle)
+
+
 
     // If the fielder can arrive in time vs. can't arrive in time (for pop ups and fly balls)
     if (mintime[1] < traveltimeglobal){
@@ -578,13 +1028,16 @@ function calculateTimeToIntercept(launchangle,exitvelo){
             launchangle: launchangle,
             exitvelo: exitvelo,
             traveltime: traveltimeglobal,
-            fielded: true
+            fielded: true,
+            closestplayer: mintime[0]
         })
-        landings.selectAll("circle")
-            .data(landingData.filter(function(d) { return d.fielded; }))
+        landings.selectAll("circle.fly.fielded")
+            .data(landingData.filter(function(d) {
+                return (d.fielded && ["Fly Ball","Pop Up"].includes(d.type));
+            }))
             .enter()
             .append("circle")
-            .attr("class","record fielded " + hyphenate(hittype))
+            .attr("class","record fielded fly " + hyphenate(hittype))
             .attr("fill","green")
             .attr("cx",d=>d.xpos)
             .attr("cy",d=>d.ypos)
@@ -659,13 +1112,16 @@ function calculateTimeToIntercept(launchangle,exitvelo){
             launchangle: launchangle,
             exitvelo: exitvelo,
             traveltime: traveltimeglobal,
-            fielded: false
+            fielded: false,
+            closestplayer: mintime[0]
         })
-        landings.selectAll("rect")
-            .data(landingData.filter(function(d) { return !d.fielded; }))
+        landings.selectAll("rect.fly.not-fielded")
+            .data(landingData.filter(function(d) {
+                return (!d.fielded && ["Fly Ball","Pop Up"].includes(d.type));
+            }))
             .enter()
             .append("rect")
-            .attr("class","record not-fielded " + hyphenate(hittype))
+            .attr("class","record not-fielded fly " + hyphenate(hittype))
             .attr("fill","red")
             .attr("fill-opacity",1)
             .attr("x",d=>(d.xpos-2))
@@ -742,6 +1198,7 @@ function clearLandings(){
     landings.selectAll(".record")
         .transition()
         .attr("fill-opacity",0)
+        .attr("stroke-opacity",0)
         .transition()
         .remove()
 
