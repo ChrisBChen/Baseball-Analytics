@@ -12,6 +12,9 @@ let fielddim = 500;
 let playerRad = 5
 let ballRad = 2.5
 
+//Set player fill color
+let playerColor = "#005C5C"
+
 //Gravity
 const gravity = -32.17
 
@@ -52,7 +55,7 @@ let xfieldLineScale = d3.scaleLinear()
 
 //Set tooltip box height and width
 var tooltipheight = 20
-var tooltipwidth = 100
+var tooltipwidth = 140
 
 //Initialize global variables
 var players;
@@ -129,8 +132,15 @@ function drawPlayers(inputPlayers){
         return row;
     })
         .then(data => {
-            console.log(data)
+
             csvData = data;
+
+            //Initialize line group for ground balls
+            groundBallLines = d3.select("#field").select("svg")
+                .append("g")
+                .attr("id","groundBallLines")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
 
             //Initialize simulated hit recorder
             //This comes first because the players need to be above the hits
@@ -158,7 +168,7 @@ function drawPlayers(inputPlayers){
                 .attr("cy",d => {
                     return yfieldLineScale(positionSVGCoords(d.position,"y"))
                 })
-                .attr("fill","blue")
+                .attr("fill",playerColor)
 
             // Define individual drag functionalities
             let drag = d3.drag()
@@ -238,7 +248,6 @@ function dragstarted(d,i) {
 
 // Move players when dragged
 function dragged(event) {
-    console.log(event.x)
     let tempx = xfieldLineScale.invert(event.x - fielddim/2);
     let tempy = yfieldLineScale.invert(event.y);
     d3.select(this)
@@ -262,14 +271,18 @@ function betterGenBall100() {
         var yvelo;
         var launchangle;
         var exitvelo;
+        var grounderdata = [];
+        var forceFlyBall = false;
 
         // Fetch the boundaries of the field and initialize an SVG point
         let path = document.getElementById('fieldline');
         let testpoint = document.getElementById('field-svg').createSVGPoint();
 
+        // Generate a random angle (left field = 0 deg, right field = 90 deg) for the ball
+        var tempangle = Math.random() * Math.PI/2 + (Math.PI/4)
+
         do {
-            // Generate a random angle (left field = 0 deg, right field = 90 deg) for the ball
-            var tempangle = Math.random() * Math.PI / 2 + (Math.PI / 4)
+
 
             //Generate a random launch angle and velocity, preferring fly balls between 30-90 deg
             /*
@@ -283,23 +296,36 @@ function betterGenBall100() {
             Assume that all hits follow a normal distribution around 10 degrees,
             with a maximum launch angle of 80 degrees
              */
+            // Keep calculating launch angles until we get a fly ball or ground ball (aka not a line drive)
+            var approved;
 
-            // Keep calculating launch angles until we get a fly ball
             do {
                 launchangle = d3.randomNormal(10,70/3)()
+
+                if (forceFlyBall){
+                    approved = (launchangle < 25)
+                }
+                else{
+                    approved = (launchangle < 25 && launchangle >= 10)
+                }
+
             }
-            while (launchangle < 25)
+            while (approved)
+
+            //Since we check for "inside the park" differently, this allows us to actually
+            //maintain an even distribution of fly balls and grounders
+            if (launchangle >= 25){
+                forceFlyBall = true;
+            }
 
             //Generate a random exit velo (from a Gaussian distribution)
             //League average exit velo is about 89MPH, and max exit velo is around 120
-            //Therefore, standard deviation is approximately 31/3
             exitVelo = d3.randomNormal([89],[10.33])()
-            //exitVelo = randomNormal(4) * (120 - 58) + 58
             //convert to feet per second
             exitVelo *= 1.46667
 
-            var xvelo = Math.cos(launchangle * Math.PI / 180) * exitVelo
-            yvelo = Math.sin(launchangle * Math.PI / 180) * exitVelo
+            var xvelo = Math.cos(launchangle * Math.PI/180) * exitVelo
+            yvelo = Math.sin(launchangle * Math.PI/180) * exitVelo
 
             // Calculate traveltime using d = vi*t + 0.5(a)t^2
             //                            t = (d - 0.5(a)t^2)/vi
@@ -307,35 +333,55 @@ function betterGenBall100() {
             // Acceleration due to gravity is -32.17 ft/s^2
 
             var contactheight = d3.randomNormal(2.5,1/3)()
-            var traveltimearray = quadraticFormula(0.5 * gravity, yvelo, -contactheight)
 
-            if (traveltimearray[0] === 0) {
+            // Calculate intercept point for ground ball (if any)
+            //
+            if (launchangle < 10 && !forceFlyBall){
+                grounderdata = groundBallTTI(tempangle,xvelo,launchangle,exitVelo);
+                break;
+            }
+
+
+
+            var traveltimearray = quadraticFormula(0.5*gravity,yvelo,-contactheight)
+
+            if (traveltimearray[0] === 0){
                 traveltime = null
-            } else if (traveltimearray[0] === 1) {
+            }
+            else if (traveltimearray[0] === 1){
                 traveltime = traveltimearray[1]
-            } else {
-                traveltime = Math.max(traveltimearray[1], traveltimearray[2])
+            }
+            else {
+                traveltime = Math.max(traveltimearray[1],traveltimearray[2])
             }
 
             var distance = xvelo * traveltime;
 
-            tempcoords = components(distance, tempangle)
+            tempcoords = components(distance,tempangle)
 
             /////////Currently calculating distance, then break into components to get coordinates
 
             // This code chunk tests if the hit ball is inside the park
-            testpoint.x = xfieldLineScale(tempcoords[0]) + fielddim / 2
+            testpoint.x = xfieldLineScale(tempcoords[0]) + fielddim/2
             testpoint.y = yfieldLineScale(tempcoords[1])
         }
         while (!(path.isPointInFill(testpoint)))
 
-        var svgcoords = [xfieldLineScale(tempcoords[0]) + fielddim / 2, yfieldLineScale(tempcoords[1])]
+        if (grounderdata.length != 0) {
+            //grounderdata's format: svg xposition, svg yposition, time to intercept, boolean fielded?
+            ballpos = [grounderdata[0], grounderdata[1]]
+            traveltimeglobal = grounderdata[2]
+        }
+        else{
+            var svgcoords = [xfieldLineScale(tempcoords[0]) + fielddim / 2, yfieldLineScale(tempcoords[1])]
 
-        //set global ball position variable
-        ballpos = [svgcoords[0], svgcoords[1]]
+            //set global ball position variable
+            ballpos = [svgcoords[0], svgcoords[1]]
 
-        traveltimeglobal = traveltime;
-        calculateTimeToIntercept(launchangle, exitvelo);
+            traveltimeglobal = traveltime;
+            calculateTimeToIntercept(launchangle, exitvelo);
+        }
+
     }
     filterByHit()
 }
@@ -393,8 +439,6 @@ function betterGenBall() {
             forceFlyBall = true;
         }
 
-        console.log("Launch Angle: " + launchangle)
-
         //Generate a random exit velo (from a Gaussian distribution)
         //League average exit velo is about 89MPH, and max exit velo is around 120
         exitVelo = d3.randomNormal([89],[10.33])()
@@ -441,12 +485,8 @@ function betterGenBall() {
         // This code chunk tests if the hit ball is inside the park
         testpoint.x = xfieldLineScale(tempcoords[0]) + fielddim/2
         testpoint.y = yfieldLineScale(tempcoords[1])
-        console.log(testpoint.x, testpoint.y)
-        console.log('Point test:', path.isPointInFill(testpoint));
     }
     while (!(path.isPointInFill(testpoint)))
-
-    console.log("Grounder data's length is " + grounderdata.length)
 
     if (grounderdata.length != 0){
         //grounderdata's format: svg xposition, svg yposition, time to intercept, boolean fielded?
@@ -467,6 +507,7 @@ function betterGenBall() {
             .attr("cy",yfieldLineScale(0))
             .transition()
             .duration(traveltimeglobal * 1000)
+            .ease(d3.easeCubicOut)
             .attr("fill-opacity",100)
             .attr("cx",ballpos[0])
             .attr("cy",ballpos[1])
@@ -578,8 +619,6 @@ function groundBallTTI(tempangle,xvelo,launchangle,exitvelo){
     //Inputs:
     // tempangle: directional angle (left vs. right field) in radians
     // xvelo: x component of exit velocity, in ft/s
-    console.log("---------------")
-    console.log("GROUND BALL")
     let path = document.getElementById('fieldline');
     let testpoint = document.getElementById('field-svg').createSVGPoint()
 
@@ -603,10 +642,6 @@ function groundBallTTI(tempangle,xvelo,launchangle,exitvelo){
     var stepx = 0;
     var stepy = 0;
 
-    console.log("Max Distance Time: " + maxdistancetime)
-    console.log("Max Distance: " + maxdistance)
-    console.log("tempangle: " + (tempangle*180/Math.PI))
-
     do {
         //Step the distances one forwards and check if we've exited the stadium
         stepx += xvelocomponents[0] * deltaT;
@@ -614,7 +649,6 @@ function groundBallTTI(tempangle,xvelo,launchangle,exitvelo){
         testpoint.x = xfieldLineScale(stepx) + fielddim/2
         testpoint.y = yfieldLineScale(stepy)
         if (!(path.isPointInFill(testpoint))){
-            console.log("HIT THE WALL =====================")
             break;
         }
 
@@ -632,13 +666,9 @@ function groundBallTTI(tempangle,xvelo,launchangle,exitvelo){
 
         //Calculate which player is closest to the ball
         mintime = tti(xfieldLineScale(tempx) + fielddim/2, yfieldLineScale(tempy))
-        console.log("Time: " + elapsedtime)
-        console.log("Position: " + tempx + ", " + tempy)
-        console.log("mintime" + mintime[0] + " " + mintime[1])
     }
     while (elapsedtime < maxdistancetime && elapsedtime < mintime[1])
 
-    console.log(tempx,tempy)
     var timetofirst = throwtofirst(mintime[0],tempx,tempy)
 
     //set ball transfer time from fielding the ball to throwing (release time)
@@ -650,13 +680,8 @@ function groundBallTTI(tempangle,xvelo,launchangle,exitvelo){
     //Calculate total time from contact to the ball arriving at first
     var totaltime = mintime[1] + transfertime + timetofirst
 
-    console.log("33333333333333333333")
-    console.log("TTI: " + mintime[1])
-    console.log("timetofirst: " + timetofirst)
-    console.log("Total time: " + totaltime)
     var hittype = "Ground Ball"
     if (totaltime < runnertime){
-        console.log("A play has been made!")
 
         landingData.push({
             type: hittype,
@@ -669,7 +694,7 @@ function groundBallTTI(tempangle,xvelo,launchangle,exitvelo){
             closestplayer: mintime[0]
         })
 
-        landings.selectAll("line.ground-ball.fielded")
+        groundBallLines.selectAll("line.ground-ball.fielded")
             .data(landingData.filter(function(d) { return (d.fielded && d.type === "Ground Ball"); }))
             .enter()
             .append("line")
@@ -710,9 +735,6 @@ function groundBallTTI(tempangle,xvelo,launchangle,exitvelo){
                     .duration(150)
                     .attr("fill-opacity",1)
 
-
-                console.log(data)
-                console.log(mouse)
                 d3.select(this)
                     .transition()
                     .duration(150)
@@ -756,7 +778,6 @@ function groundBallTTI(tempangle,xvelo,launchangle,exitvelo){
         return [(xfieldLineScale(tempx) + fielddim/2),yfieldLineScale(tempy),mintime[1],true]
     }
     else {
-        console.log("The runner is safe...")
 
         landingData.push({
             type: hittype,
@@ -769,7 +790,7 @@ function groundBallTTI(tempangle,xvelo,launchangle,exitvelo){
             closestplayer: mintime[0]
         })
 
-        landings.selectAll("line.ground-ball.not-fielded")
+        groundBallLines.selectAll("line.ground-ball.not-fielded")
             .data(landingData.filter(function(d) { return (!d.fielded && d.type === "Ground Ball"); }))
             .enter()
             .append("line")
@@ -810,9 +831,6 @@ function groundBallTTI(tempangle,xvelo,launchangle,exitvelo){
                     .duration(150)
                     .attr("fill-opacity",1)
 
-
-                console.log(data)
-                console.log(mouse)
                 d3.select(this)
                     .transition()
                     .duration(150)
@@ -898,7 +916,7 @@ function throwtofirst(playerposition,x,y){
 //Runs the quadratic formula, returning various different outputs
 function quadraticFormula(a,b,c){
     var determinant = Math.pow(b,2) - 4*a*c
-    console.log(determinant)
+
     if (determinant < 0){
         return [0]
     }
@@ -1009,10 +1027,7 @@ function calculateTimeToIntercept(launchangle,exitvelo){
     })
 
      */
-    console.log("Pre-mintime")
     var mintime = tti(ballpos[0],ballpos[1])
-    console.log("Post-mintime: ")
-    console.log(mintime)
 
     // Record what type of hit
     var hittype = typeofhit(launchangle)
@@ -1062,9 +1077,6 @@ function calculateTimeToIntercept(launchangle,exitvelo){
                     .duration(150)
                     .attr("fill-opacity",1)
 
-
-                console.log(data)
-                console.log(mouse)
                 d3.select(this)
                     .transition()
                     .duration(150)
@@ -1147,9 +1159,6 @@ function calculateTimeToIntercept(launchangle,exitvelo){
                     .duration(150)
                     .attr("fill-opacity",1)
 
-
-                console.log(data)
-                console.log(mouse)
                 d3.select(this)
                     .transition()
                     .duration(150)
@@ -1198,6 +1207,11 @@ function clearLandings(){
     landings.selectAll(".record")
         .transition()
         .attr("fill-opacity",0)
+        .transition()
+        .remove()
+
+    groundBallLines.selectAll(".record")
+        .transition()
         .attr("stroke-opacity",0)
         .transition()
         .remove()
@@ -1248,6 +1262,7 @@ var hitfilter = [];
 
 var flyballcheckbox = document.getElementById("filter-fly-balls");
 var popupcheckbox = document.getElementById("filter-pop-ups");
+var groundballcheckbox = document.getElementById("filter-ground-balls");
 
 flyballcheckbox.addEventListener( 'change', function() {
     if(this.checked) {
@@ -1267,6 +1282,15 @@ popupcheckbox.addEventListener( 'change', function() {
     filterByHit()
 });
 
+groundballcheckbox.addEventListener( 'change', function() {
+    if(this.checked) {
+        hitfilter.push("ground-ball")
+    } else {
+        hitfilter = hitfilter.filter(type => type !== "ground-ball")
+    }
+    filterByHit()
+});
+
 function filterByHit(){
     //Pull the types into array "hitfilter"
     //In the event of empyt hitfilter
@@ -1274,7 +1298,6 @@ function filterByHit(){
         hitfilter = ["fly-ball","pop-up","ground-ball","line-drive"]
     }
 
-    console.log(hitfilter)
     d3.selectAll(".record")
         .filter(function() {
             for (var i = 0; i < hitfilter.length; i++)
@@ -1284,7 +1307,8 @@ function filterByHit(){
             return true
         })
         .transition()
-        .attr("fill-opacity",.2);
+        .attr("fill-opacity",.2)
+        .attr("stroke-opacity",.2);
 
     d3.selectAll(".record")
         .filter(function() {
@@ -1295,7 +1319,8 @@ function filterByHit(){
             return false
         })
         .transition()
-        .attr("fill-opacity",1);
+        .attr("fill-opacity",1)
+        .attr("stroke-opacity",1);
 
     if (hitfilter.length === 4) {
         hitfilter = []

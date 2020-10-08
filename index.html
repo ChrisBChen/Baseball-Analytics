@@ -1,6 +1,6 @@
----
+<!---
 permalink: /index.html
----
+--->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -14,7 +14,7 @@ permalink: /index.html
 
 </head>
 <body>
-<div class="container">
+<div class="container mt-5 mb-lg-5">
     <h1>Baseball Hit Simulator</h1>
     <div class="row">
         <div class="col">
@@ -27,11 +27,12 @@ permalink: /index.html
             <button type="button" class="btn btn-primary" id="reset-players">Reset Players</button>
             <div class="dropdown">
                 <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                    Dropdown button
+                    Filter by Hit Type
                 </button>
                 <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-                    <a class="dropdown-item" aria-disabled="true"><input type="checkbox" id="filter-fly-balls">Fly Balls</a>
-                    <a class="dropdown-item" aria-disabled="true"><input type="checkbox" id="filter-pop-ups">Pop Ups</a>
+                    <a class="dropdown-item" aria-disabled="true"><input type="checkbox" id="filter-fly-balls"> Fly Balls</a>
+                    <a class="dropdown-item" aria-disabled="true"><input type="checkbox" id="filter-pop-ups"> Pop Ups</a>
+                    <a class="dropdown-item" aria-disabled="true"><input type="checkbox" id="filter-ground-balls"> Ground Balls</a>
                 </div>
             </div>
             <!-- For future implementation
@@ -42,7 +43,31 @@ permalink: /index.html
             -->
             <div id="batted-ball-info"></div>
         </div>
+
     </div>
+    <!-- For future implementation:
+    <div class="row">
+        <div class="col-3">
+            <div class="nav flex-column nav-pills" id="v-pills-tab" role="tablist" aria-orientation="vertical">
+                <a class="nav-link active" id="v-pills-home-tab" data-toggle="pill" href="#v-pills-home" role="tab" aria-controls="v-pills-home" aria-selected="true">Home</a>
+                <a class="nav-link" id="v-pills-profile-tab" data-toggle="pill" href="#v-pills-profile" role="tab" aria-controls="v-pills-profile" aria-selected="false">Profile</a>
+                <a class="nav-link" id="v-pills-messages-tab" data-toggle="pill" href="#v-pills-messages" role="tab" aria-controls="v-pills-messages" aria-selected="false">Messages</a>
+                <a class="nav-link" id="v-pills-settings-tab" data-toggle="pill" href="#v-pills-settings" role="tab" aria-controls="v-pills-settings" aria-selected="false">Settings</a>
+            </div>
+        </div>
+        <div class="col-9">
+            <div class="tab-content" id="v-pills-tabContent">
+                <div class="tab-pane fade show active" id="v-pills-home" role="tabpanel" aria-labelledby="v-pills-home-tab">...</div>
+                <div class="tab-pane fade" id="v-pills-profile" role="tabpanel" aria-labelledby="v-pills-profile-tab">
+                    <h3>Testing!</h3>
+                    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean sagittis est et nibh congue, sit amet varius nisi semper. Aliquam sem nisi, accumsan eu tortor vel, accumsan fermentum nibh. Duis at rhoncus felis. In interdum viverra cursus. Maecenas viverra risus accumsan, laoreet diam sed, aliquam dolor. Fusce ac diam ornare, maximus eros at, congue dui. Suspendisse imperdiet urna massa. Fusce ex nunc, placerat at varius vitae, volutpat ut neque. Pellentesque cursus metus augue, id lobortis nibh volutpat eu.</p>
+                </div>
+                <div class="tab-pane fade" id="v-pills-messages" role="tabpanel" aria-labelledby="v-pills-messages-tab">...</div>
+                <div class="tab-pane fade" id="v-pills-settings" role="tabpanel" aria-labelledby="v-pills-settings-tab">...</div>
+            </div>
+        </div>
+    </div>
+    -->
 </div>
 
 
