@@ -298,6 +298,7 @@ function betterGenBall100() {
         traveltimeglobal = traveltime;
         calculateTimeToIntercept(launchangle, exitvelo);
     }
+    filterByHit()
 }
 
 function betterGenBall() {
@@ -395,6 +396,9 @@ function betterGenBall() {
 
     var caught = calculateTimeToIntercept(launchangle,exitvelo);
 
+    //Edit opacity depending on the type of ball
+    filterByHit()
+
     //Plot the ball in the field
     d3.select("#ball")
         .transition()
@@ -418,8 +422,6 @@ function betterGenBall() {
         .attr("cx",svgcoords[0])
         .attr("cy",svgcoords[1])
         .attr("r",ballRad)
-
-
 
 }
 
@@ -468,6 +470,34 @@ function distancecalc(x1, y1, x2, y2){
     return Math.sqrt(Math.pow(x2 - x1,2) + Math.pow(y2 - y1,2));
 }
 
+// Determine what kind of hit (pop fly, line drive, etc.) based on launch angle
+function typeofhit(launchangle){
+    /*
+        From the MLB: Launch Angles:
+            Ground ball: Less than 10 degrees
+            Line drive: 10-25 degrees
+            Fly ball: 25-50 degrees
+            Pop up: Greater than 50 degrees
+         */
+    if (launchangle < 10){
+        return "Ground Ball"
+    }
+    else if (launchangle < 25){
+        return "Line Drive"
+    }
+    else if (launchangle < 50){
+        return "Fly Ball"
+    }
+    else {
+        return "Pop Up"
+    }
+}
+
+// Hyphenate all spaces and lowercase a string
+function hyphenate(str){
+    return str.replace(/\s+/g, '-').toLowerCase();
+}
+
 function calculateTimeToIntercept(launchangle,exitvelo){
     // Store the player position closest to the ball and the time to intercept
     var mintime = [null,0]
@@ -496,9 +526,14 @@ function calculateTimeToIntercept(launchangle,exitvelo){
         }
     })
     console.log(mintime)
+
+    // Record what type of hit
+    var hittype = typeofhit(launchangle)
+
+    // If the fielder can arrive in time vs. can't arrive in time (for pop ups and fly balls)
     if (mintime[1] < traveltimeglobal){
         landingData.push({
-            type: "Fly Ball",
+            type: hittype,
             xpos: ballpos[0],
             ypos: ballpos[1],
             launchangle: launchangle,
@@ -510,10 +545,11 @@ function calculateTimeToIntercept(launchangle,exitvelo){
             .data(landingData.filter(function(d) { return d.fielded; }))
             .enter()
             .append("circle")
-            .attr("class","record fielded")
+            .attr("class","record fielded " + hyphenate(hittype))
             .attr("fill","green")
             .attr("cx",d=>d.xpos)
             .attr("cy",d=>d.ypos)
+            .attr("fill-opacity",1)
             .attr("r",2)
             .on("mouseover", function(mouse,data) {
                 Tooltip.select(".tooltip-custom")
@@ -547,15 +583,6 @@ function calculateTimeToIntercept(launchangle,exitvelo){
                     .attr("width",8)
                     .attr("height",8)
             })
-            .on("mousemove", function(d) {
-                Tooltip.select(".tooltip-custom")
-                    .attr("x",mouse.offsetX)
-                    .attr("y",mouse.offsetY)
-
-                Tooltip.select(".tooltip-text")
-                    .attr("x",mouse.offsetX + 10)
-                    .attr("y",mouse.offsetY + 10)
-            })
             .on("mouseleave", function(d) {
                 Tooltip.select(".tooltip-custom")
                     .transition()
@@ -587,7 +614,7 @@ function calculateTimeToIntercept(launchangle,exitvelo){
     }
     else {
         landingData.push({
-            type: "Fly Ball",
+            type: hittype,
             xpos: ballpos[0],
             ypos: ballpos[1],
             launchangle: launchangle,
@@ -599,8 +626,9 @@ function calculateTimeToIntercept(launchangle,exitvelo){
             .data(landingData.filter(function(d) { return !d.fielded; }))
             .enter()
             .append("rect")
-            .attr("class","record not-fielded")
+            .attr("class","record not-fielded " + hyphenate(hittype))
             .attr("fill","red")
+            .attr("fill-opacity",1)
             .attr("x",d=>(d.xpos-2))
             .attr("y",d=>(d.ypos-2))
             .attr("width",4)
@@ -637,15 +665,6 @@ function calculateTimeToIntercept(launchangle,exitvelo){
                     .attr("width",8)
                     .attr("height",8)
             })
-            .on("mousemove", function(d) {
-                Tooltip.select(".tooltip-custom")
-                    .attr("x",mouse.offsetX)
-                    .attr("y",mouse.offsetY)
-
-                Tooltip.select(".tooltip-text")
-                    .attr("x",mouse.offsetX + 10)
-                    .attr("y",mouse.offsetY + 10)
-            })
             .on("mouseleave", function(d) {
                 Tooltip.select(".tooltip-custom")
                     .transition()
@@ -675,13 +694,7 @@ function calculateTimeToIntercept(launchangle,exitvelo){
                     .attr("height",4)
             })
     }
-    /*
-    for (var i = 0; i < csvData.length; i++){
-        console.log("Checking " + csvData[i].firstname + csvData[i].lastname + "...")
 
-    }
-
-     */
     return mintime[1] < traveltimeglobal
 }
 
@@ -721,3 +734,66 @@ function positionSVGCoords(position,dimension){
     }
 
 }
+
+/* ---------------------------------------------------------------------------
+Writing Hit Filter Code
+--------------------------------------------------------------------------- */
+var hitfilter = [];
+
+var flyballcheckbox = document.getElementById("filter-fly-balls");
+var popupcheckbox = document.getElementById("filter-pop-ups");
+
+flyballcheckbox.addEventListener( 'change', function() {
+    if(this.checked) {
+        hitfilter.push("fly-ball")
+    } else {
+        hitfilter = hitfilter.filter(type => type !== "fly-ball")
+    }
+    filterByHit()
+});
+
+popupcheckbox.addEventListener( 'change', function() {
+    if(this.checked) {
+        hitfilter.push("pop-up")
+    } else {
+        hitfilter = hitfilter.filter(type => type !== "pop-up")
+    }
+    filterByHit()
+});
+
+function filterByHit(){
+    //Pull the types into array "hitfilter"
+    //In the event of empyt hitfilter
+    if (hitfilter === undefined || hitfilter.length == 0) {
+        hitfilter = ["fly-ball","pop-up","ground-ball","line-drive"]
+    }
+
+    console.log(hitfilter)
+    d3.selectAll(".record")
+        .filter(function() {
+            for (var i = 0; i < hitfilter.length; i++)
+                if (this.classList.contains(hitfilter[i])){
+                    return false
+                }
+            return true
+        })
+        .transition()
+        .attr("fill-opacity",.2);
+
+    d3.selectAll(".record")
+        .filter(function() {
+            for (var i = 0; i < hitfilter.length; i++)
+                if (this.classList.contains(hitfilter[i])){
+                    return true
+                }
+            return false
+        })
+        .transition()
+        .attr("fill-opacity",1);
+
+    if (hitfilter.length === 4) {
+        hitfilter = []
+    }
+
+}
+
