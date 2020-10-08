@@ -75,7 +75,7 @@ document.getElementById("ball-gen").onclick = betterGenBall
 // Activates to calculate and plot time to intercept
 document.getElementById("ball-gen-100").onclick = betterGenBall100
 document.getElementById("clear-landings").onclick = clearLandings
-
+document.getElementById("reset-players").onclick = resetPlayers
 
 function drawField(){
     field = d3.select("#field").append("svg")
@@ -114,9 +114,22 @@ function drawPlayers(inputPlayers){
         row.number = +row.number;
         row.speed = +row.speed;
         row.skill = +row.skill;
+        function cleanPosition(input){
+            if (input === "1B") {
+                return "OneB"
+            } else if (input === "2B") {
+                return "TwoB"
+            } else if (input === "3B") {
+                return "ThreeB"
+            } else {
+                return input
+            }
+        }
+        row.position = cleanPosition(row.position);
         return row;
     })
         .then(data => {
+            console.log(data)
             csvData = data;
 
             //Initialize simulated hit recorder
@@ -197,7 +210,29 @@ function drawPlayers(inputPlayers){
         })
 }
 
-function dragstarted(d) {
+function resetPlayers(){
+    players.selectAll("circle")
+        /*
+        .data(csvData)
+        .enter()
+        .append("circle")
+        .attr("class","player")
+        .attr("id",d => d.position)
+         */
+        .transition()
+        .attr("cx",d => {
+            return xfieldLineScale(positionSVGCoords(d.position,"x")) + fielddim/2
+        })
+        .attr("cy",d => {
+            return yfieldLineScale(positionSVGCoords(d.position,"y"))
+        })
+}
+
+function dragstarted(d,i) {
+    d3.selectAll("#" + i.position)
+        .transition()
+        .ease(d3.easeCubicInOut)
+        .attr("r",playerRad*2)
     //d3.select(self).raise().classed('active', true);
 }
 
@@ -211,7 +246,11 @@ function dragged(event) {
         .attr('cy', yfieldLineScale(tempy))
 }
 
-function dragended(d) {
+function dragended(d,i) {
+    d3.selectAll("#" + i.position)
+        .transition()
+        .ease(d3.easeCubicInOut)
+        .attr("r",playerRad)
     //d3.select(this).classed('active', false);
 }
 
@@ -701,7 +740,17 @@ function calculateTimeToIntercept(launchangle,exitvelo){
 function clearLandings(){
     landingData = []
     landings.selectAll(".record")
+        .transition()
+        .attr("fill-opacity",0)
+        .transition()
         .remove()
+
+    ball.transition()
+        .attr("cx", xfieldLineScale(0) + fielddim/2)
+        .attr("cy", yfieldLineScale(0))
+        .attr("r",ballRad)
+        .attr("fill-opacity",0);
+
 }
 
 // Input: Field position of player (e.g. 3B, SS)
@@ -710,9 +759,9 @@ function positionSVGCoords(position,dimension){
     if (dimension === "x"){
         if (position === "P") {return 0}
         else if (position === "C") {return 0}
-        else if (position === "1B") {return 55}
-        else if (position === "2B") {return 10}
-        else if (position === "3B") {return -55}
+        else if (position === "OneB") {return 55}
+        else if (position === "TwoB") {return 10}
+        else if (position === "ThreeB") {return -55}
         else if (position === "SS") {return -25}
         else if (position === "RF") {return 150}
         else if (position === "LF") {return -150}
@@ -723,9 +772,9 @@ function positionSVGCoords(position,dimension){
     else {
         if (position === "P") {return 60.5;}
         else if (position === "C") {return 0}
-        else if (position === "1B") {return 65}
-        else if (position === "2B") {return 120}
-        else if (position === "3B") {return 95}
+        else if (position === "OneB") {return 65}
+        else if (position === "TwoB") {return 120}
+        else if (position === "ThreeB") {return 95}
         else if (position === "SS") {return 120}
         else if (position === "RF") {return 225}
         else if (position === "LF") {return 225}
